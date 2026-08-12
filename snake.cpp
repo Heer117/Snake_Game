@@ -7,11 +7,11 @@
 #include <ctime>
 using namespace std;
 
-const string SNAKE_HEAD = "👀";
-const string SNAKE_BODY = "🩷";
-const string FOOD_ICON  = "🪱";
-const string TILE       = "⬜";
-const string BORDER     = "🟫";
+const string SNAKE_HEAD = "ðŸ‘€";
+const string SNAKE_BODY = "ðŸ©·";
+const string FOOD_ICON  = "ðŸª±";
+const string TILE       = "â¬œ";
+const string BORDER     = "ðŸŸ«";
 
 const int WIDTH = 20;
 const int HEIGHT = 12;
@@ -30,12 +30,14 @@ private:
 public:
     Snake() { reset(); }
     void reset() {
+        reset({WIDTH / 2, HEIGHT / 2}, RIGHT);
+    }
+    void reset(Position start, Dir d) {
         body.clear();
-        int midX = WIDTH / 2, midY = HEIGHT / 2;
-        body.push_back({midX, midY});
-        body.push_back({midX - 1, midY});
-        body.push_back({midX - 2, midY});
-        dir = RIGHT;
+        body.push_back(start);
+        body.push_back({start.x - 1, start.y});
+        body.push_back({start.x - 2, start.y});
+        dir = d;
     }
     Position head() const { return body.front(); }
     const vector<Position>& getBody() const { return body; }
@@ -83,13 +85,22 @@ public:
             pos.y = rand() % HEIGHT;
         } while (s.occupies(pos));
     }
+    void spawn(const Snake &s1, const Snake &s2) {
+        do {
+            pos.x = rand() % WIDTH;
+            pos.y = rand() % HEIGHT;
+        } while (s1.occupies(pos) || s2.occupies(pos));
+    }
 };
 
 class Game {
     Snake snake;
+    Snake snake2;
     Food food;
     int score = 0;
+    int score2 = 0;
     int highScore = 0;
+    int losingPlayer = 0;
     bool running = true;
     bool gameOver = false;
     double speedFactor = 1.0;
@@ -148,13 +159,16 @@ class Game {
                 Position p{x, y};
                 if (p == snake.head()) cout << SNAKE_HEAD;
                 else if (snake.occupies(p)) cout << SNAKE_BODY;
+                else if (p == snake2.head()) cout << SNAKE_HEAD;
+                else if (snake2.occupies(p)) cout << SNAKE_BODY;
                 else if (p == food.get()) cout << FOOD_ICON;
                 else cout << TILE;
             }
             cout << BORDER << '\n';
         }
         for (int i = 0; i < WIDTH + 2; i++) cout << BORDER;
-        cout << "\nScore: " << score << "   High Score: " << highScore << '\n';
+        cout << "\nPlayer 1 Score: " << score << "   Player 2 Score: " << score2
+             << "   High Score: " << highScore << '\n';
     }
 
     void processInput() {
@@ -164,10 +178,10 @@ class Game {
         else if (control == 'D') snake.setDir(Snake::DOWN);
         else if (control == 'L') snake.setDir(Snake::LEFT);
         else if (control == 'R') snake.setDir(Snake::RIGHT);
-        else if (control == 'w' || control == 'W') snake.setDir(Snake::UP);
-        else if (control == 's' || control == 'S') snake.setDir(Snake::DOWN);
-        else if (control == 'a' || control == 'A') snake.setDir(Snake::LEFT);
-        else if (control == 'd' || control == 'D') snake.setDir(Snake::RIGHT);
+        else if (control == 'w' || control == 'W') snake2.setDir(Snake::UP);
+        else if (control == 's' || control == 'S') snake2.setDir(Snake::DOWN);
+        else if (control == 'a' || control == 'A') snake2.setDir(Snake::LEFT);
+        else if (control == 'd' || control == 'D') snake2.setDir(Snake::RIGHT);
         else if (control == 'q' || control == 'Q') running = false;
         else if (control == 'r' || control == 'R') restart();
     }
@@ -176,26 +190,49 @@ class Game {
         snake.move();
         Position h = snake.head();
 
-        if (h.x < 0 || h.x >= WIDTH || h.y < 0 || h.y >= HEIGHT || snake.collidesWithSelf()) {
+        if (h.x < 0 || h.x >= WIDTH || h.y < 0 || h.y >= HEIGHT ||
+            snake.collidesWithSelf() || snake2.occupies(h)) {
             gameOver = true;
+            losingPlayer = 1;
             return;
         }
 
         if (h == food.get()) {
             score++;
             snake.move(true);
-            food.spawn(snake);
+            food.spawn(snake, snake2);
             if (score > highScore) highScore = score;
-            if (speedFactor > 0.3) speedFactor *= 0.95; // speed increases gradually
+            if (speedFactor > 0.3) speedFactor *= 0.95;
+        }
+
+        snake2.move();
+        h = snake2.head();
+
+        if (h.x < 0 || h.x >= WIDTH || h.y < 0 || h.y >= HEIGHT ||
+            snake2.collidesWithSelf() || snake.occupies(h)) {
+            gameOver = true;
+            losingPlayer = 2;
+            return;
+        }
+
+        if (h == food.get()) {
+            score2++;
+            snake2.move(true);
+            food.spawn(snake, snake2);
+            if (score2 > highScore) highScore = score2;
+            if (speedFactor > 0.3) speedFactor *= 0.95;
         }
     }
 
     void restart() {
         snake.reset();
+        snake2.reset({WIDTH / 2, HEIGHT / 2 + 3}, Snake::RIGHT);
         score = 0;
+        score2 = 0;
+        losingPlayer = 0;
         gameOver = false;
         speedFactor = 1.0;
-        food.spawn(snake);
+        food.spawn(snake, snake2);
     }
 
 public:
@@ -218,7 +255,9 @@ public:
 
             // Show Game Over only once
             cout << "\nGAME OVER \n";
-            cout << "Final Score: " << score << "   High Score: " << highScore << '\n';
+            cout << "Player " << losingPlayer << " lost.\n";
+            cout << "Final Scores - Player 1: " << score << "   Player 2: " << score2
+                 << "   High Score: " << highScore << '\n';
             cout << "Press R to restart or Q to quit.\n";
 
             // Wait for player choice
@@ -233,7 +272,8 @@ public:
 
         showCursor();
         disableNonBlocking();
-        cout << "\nThanks for playing! Final Score: " << score << "\n";
+        cout << "\nThanks for playing! Final Scores - Player 1: " << score
+             << "   Player 2: " << score2 << "\n";
     }
 };
 
