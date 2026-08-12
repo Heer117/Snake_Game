@@ -1,244 +1,79 @@
-#include <iostream>
-#include <vector>
-#include <unistd.h>
-#include <termios.h>
-#include <fcntl.h>
-#include <cstdlib>
-#include <ctime>
-using namespace std;
+# Two-Player Snake (Terminal Game)
 
-const string SNAKE_HEAD = "👀";
-const string SNAKE_BODY = "🩷";
-const string FOOD_ICON  = "🪱";
-const string TILE       = "⬜";
-const string BORDER     = "🟫";
+A console-based, two-player Snake game written in C++ for Unix-like terminals. Both snakes race to eat the same food, growing and racking up score, until one crashes into a wall, itself, or the other snake.
 
-const int WIDTH = 20;
-const int HEIGHT = 12;
+## Features
 
-struct Position {
-    int x, y;
-    bool operator==(const Position &o) const { return x == o.x && y == o.y; }
-};
+- **Two independent snakes** on a shared board
+  - Player 1: Arrow keys (Up / Down / Left / Right)
+  - Player 2: `W` `A` `S` `D`
+- **Shared food** — whichever snake reaches it first grows and scores a point
+- **Independent scores** for each player, plus a running high score, shown live below the board
+- **Collision detection** against walls, self, and the opposing snake — the game ends the moment either snake collides, and announces which player lost
+- **Increasing difficulty** — the game speeds up slightly each time a snake eats
+- **Restart/quit** — press `R` to restart or `Q` to quit, both mid-game and on the game-over screen
+- Emoji-based rendering (👀 head, 🩷 body, 🪱 food, 🟫 border, ⬜ empty tile)
 
-class Snake {
-public:
-    enum Dir { UP, DOWN, LEFT, RIGHT };
-private:
-    vector<Position> body;
-    Dir dir;
-public:
-    Snake() { reset(); }
-    void reset() {
-        body.clear();
-        int midX = WIDTH / 2, midY = HEIGHT / 2;
-        body.push_back({midX, midY});
-        body.push_back({midX - 1, midY});
-        body.push_back({midX - 2, midY});
-        dir = RIGHT;
-    }
-    Position head() const { return body.front(); }
-    const vector<Position>& getBody() const { return body; }
-    void setDir(Dir d) {
-        if ((dir == UP && d == DOWN) || (dir == DOWN && d == UP) ||
-            (dir == LEFT && d == RIGHT) || (dir == RIGHT && d == LEFT))
-            return;
-        dir = d;
-    }
-    void setDirFromKey(char k) {
-        if (k == 'w' || k == 'W') setDir(UP);
-        else if (k == 's' || k == 'S') setDir(DOWN);
-        else if (k == 'a' || k == 'A') setDir(LEFT);
-        else if (k == 'd' || k == 'D') setDir(RIGHT);
-    }
-    void move(bool grow = false) {
-        Position nh = head();
-        if (dir == UP) nh.y--;
-        else if (dir == DOWN) nh.y++;
-        else if (dir == LEFT) nh.x--;
-        else if (dir == RIGHT) nh.x++;
-        body.insert(body.begin(), nh);
-        if (!grow) body.pop_back();
-    }
-    bool collidesWithSelf() const {
-        Position h = head();
-        for (size_t i = 1; i < body.size(); ++i)
-            if (body[i] == h) return true;
-        return false;
-    }
-    bool occupies(const Position &p) const {
-        for (auto &b : body)
-            if (b == p) return true;
-        return false;
-    }
-};
+## Requirements
 
-class Food {
-    Position pos;
-public:
-    Position get() const { return pos; }
-    void spawn(const Snake &s) {
-        do {
-            pos.x = rand() % WIDTH;
-            pos.y = rand() % HEIGHT;
-        } while (s.occupies(pos));
-    }
-};
+- A Unix-like OS (Linux/macOS) or WSL on Windows — the game uses `termios.h`, `unistd.h`, and `fcntl.h` for raw, non-blocking terminal input, which are POSIX-only
+- `g++` (or another C++ compiler with C++11 support or later)
+- A terminal that renders emoji correctly and is reasonably large (the board is 20×12 tiles plus borders and a status line)
 
-class Game {
-    Snake snake;
-    Food food;
-    int score = 0;
-    int highScore = 0;
-    bool running = true;
-    bool gameOver = false;
-    double speedFactor = 1.0;
-    const int baseDelay = 180000; // start slow (microseconds)
+## Build
 
-    struct termios oldt;
+```bash
+g++ -std=c++11 -O2 snake.cpp -o snake
+```
 
-    void hideCursor() { cout << "\033[?25l"; }
-    void showCursor() { cout << "\033[?25h"; }
-    void clearScreen() { cout << "\033[2J"; }
-    void moveCursorTopLeft() { cout << "\033[H"; }
+## Run
 
-    void enableNonBlocking() {
-        tcgetattr(STDIN_FILENO, &oldt);
-        struct termios newt = oldt;
-        newt.c_lflag &= ~(ICANON | ECHO);
-        tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-        fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
-    }
-    void disableNonBlocking() {
-        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    }
+```bash
+./snake
+```
 
-    char readKey() {
-        char ch = 0;
-        ssize_t r = read(STDIN_FILENO, &ch, 1);
-        if (r <= 0) return 0;
-        return ch;
-    }
+## Controls
 
-    char readControl() {
-        char ch = readKey();
-        if (!ch) return 0;
-        if (ch == '\033') {
-            char ch1 = readKey();
-            if (!ch1) return 0;
-            if (ch1 == '[') {
-                char ch2 = readKey();
-                if (!ch2) return 0;
-                if (ch2 == 'A') return 'U';
-                if (ch2 == 'B') return 'D';
-                if (ch2 == 'C') return 'R';
-                if (ch2 == 'D') return 'L';
-            }
-            return 0;
-        } else return ch;
-    }
+| Key(s)              | Action                         |
+| -------------------- | ------------------------------ |
+| `↑` `↓` `←` `→`       | Move Player 1's snake          |
+| `W` `A` `S` `D`       | Move Player 2's snake          |
+| `R`                   | Restart the game               |
+| `Q`                   | Quit                            |
 
-    void drawBoard() {
-        moveCursorTopLeft();
-        for (int i = 0; i < WIDTH + 2; i++) cout << BORDER;
-        cout << '\n';
-        for (int y = 0; y < HEIGHT; y++) {
-            cout << BORDER;
-            for (int x = 0; x < WIDTH; x++) {
-                Position p{x, y};
-                if (p == snake.head()) cout << SNAKE_HEAD;
-                else if (snake.occupies(p)) cout << SNAKE_BODY;
-                else if (p == food.get()) cout << FOOD_ICON;
-                else cout << TILE;
-            }
-            cout << BORDER << '\n';
-        }
-        for (int i = 0; i < WIDTH + 2; i++) cout << BORDER;
-        cout << "\nScore: " << score << "   High Score: " << highScore << '\n';
-    }
+Snakes cannot reverse directly into themselves (e.g. moving Right then instantly pressing Left is ignored).
 
-    void processInput() {
-        char control = readControl();
-        if (!control) return;
-        if (control == 'U') snake.setDir(Snake::UP);
-        else if (control == 'D') snake.setDir(Snake::DOWN);
-        else if (control == 'L') snake.setDir(Snake::LEFT);
-        else if (control == 'R') snake.setDir(Snake::RIGHT);
-        else if (control == 'w' || control == 'W') snake.setDir(Snake::UP);
-        else if (control == 's' || control == 'S') snake.setDir(Snake::DOWN);
-        else if (control == 'a' || control == 'A') snake.setDir(Snake::LEFT);
-        else if (control == 'd' || control == 'D') snake.setDir(Snake::RIGHT);
-        else if (control == 'q' || control == 'Q') running = false;
-        else if (control == 'r' || control == 'R') restart();
-    }
+## How it Plays
 
-    void update() {
-        snake.move();
-        Position h = snake.head();
+1. Both snakes start at the center of the board, three tiles long, facing right (Player 2 spawns a few rows below Player 1).
+2. A single piece of food spawns on a random empty tile.
+3. Each game tick, both snakes advance one tile in their current direction.
+4. Whichever snake's head reaches the food first grows by one segment, earns a point, and a new food tile spawns. The game speeds up slightly.
+5. The round ends immediately when either snake:
+   - Goes out of bounds,
+   - Runs into its own body, or
+   - Runs into the other snake (including its head).
+6. The losing player is announced along with final scores. Press `R` to play again or `Q` to exit.
 
-        if (h.x < 0 || h.x >= WIDTH || h.y < 0 || h.y >= HEIGHT || snake.collidesWithSelf()) {
-            gameOver = true;
-            return;
-        }
+## Project Structure
 
-        if (h == food.get()) {
-            score++;
-            snake.move(true);
-            food.spawn(snake);
-            if (score > highScore) highScore = score;
-            if (speedFactor > 0.3) speedFactor *= 0.95; // speed increases gradually
-        }
-    }
+```
+snake.cpp   — single-file implementation (game loop, input handling, rendering, collision logic)
+```
 
-    void restart() {
-        snake.reset();
-        score = 0;
-        gameOver = false;
-        speedFactor = 1.0;
-        food.spawn(snake);
-    }
+Key components inside `snake.cpp`:
 
-public:
-    Game() { srand(time(0)); }
-    void run() {
-        enableNonBlocking();
-        hideCursor();
-        clearScreen();
-        restart();
+- **`Position`** — a simple `(x, y)` grid coordinate
+- **`Snake`** — tracks a snake's body segments and direction; handles movement, growth, and self-collision
+- **`Food`** — spawns on a random tile not occupied by either snake
+- **`Game`** — owns both snakes, the food, scores, and the terminal I/O; drives the main loop (`run()`), input parsing (`processInput()`), per-tick logic (`update()`), and rendering (`drawBoard()`)
 
-        while (running) {
-            while (!gameOver && running) {
-                processInput(); // instant response
-                update();
-                drawBoard();
-                usleep((int)(baseDelay * speedFactor));
-            }
+## Known Limitations
 
-            if (!running) break;
+- Terminal-only, POSIX-specific input handling — will not build as-is on native Windows (no WSL).
+- Board size, tile emojis, and speed curve are hard-coded constants at the top of the file.
+- No persistent high-score storage between runs — high score resets each time the program is launched.
 
-            // Show Game Over only once
-            cout << "\nGAME OVER \n";
-            cout << "Final Score: " << score << "   High Score: " << highScore << '\n';
-            cout << "Press R to restart or Q to quit.\n";
+## License
 
-            // Wait for player choice
-            bool choiceMade = false;
-            while (!choiceMade && running) {
-                char c = readControl();
-                if (!c) { usleep(250000); continue; }
-                if (c == 'r' || c == 'R') { restart(); choiceMade = true; }
-                else if (c == 'q' || c == 'Q') { running = false; choiceMade = true; }
-            }
-        }
-
-        showCursor();
-        disableNonBlocking();
-        cout << "\nThanks for playing! Final Score: " << score << "\n";
-    }
-};
-
-int main() {
-    Game g;
-    g.run();
-    return 0;
-}
+Add a license of your choice here (e.g. MIT).
