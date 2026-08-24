@@ -77,18 +77,26 @@ class Food {
     Position pos;
 public:
     Position get() const { return pos; }
-    void spawn(const Snake &s) {
+    void spawn(const vector<Snake> &snakes) {
+        bool occupied;
         do {
             pos.x = rand() % WIDTH;
             pos.y = rand() % HEIGHT;
-        } while (s.occupies(pos));
+            occupied = false;
+            for (const auto& s : snakes) {
+                if (s.occupies(pos)) {
+                    occupied = true;
+                    break;
+                }
+            }
+        } while (occupied);
     }
 };
 
 class Game {
-    Snake snake;
+    vector<Snake> snakes;
     Food food;
-    int score = 0;
+    vector<int> scores;
     int highScore = 0;
     bool running = true;
     bool gameOver = false;
@@ -146,56 +154,74 @@ class Game {
             cout << BORDER;
             for (int x = 0; x < WIDTH; x++) {
                 Position p{x, y};
-                if (p == snake.head()) cout << SNAKE_HEAD;
-                else if (snake.occupies(p)) cout << SNAKE_BODY;
-                else if (p == food.get()) cout << FOOD_ICON;
-                else cout << TILE;
+                bool isSnake = false;
+                for (const auto& s : snakes) {
+                    if (p == s.head()) { cout << SNAKE_HEAD; isSnake = true; break; }
+                    else if (s.occupies(p)) { cout << SNAKE_BODY; isSnake = true; break; }
+                }
+                if (!isSnake) {
+                    if (p == food.get()) cout << FOOD_ICON;
+                    else cout << TILE;
+                }
             }
             cout << BORDER << '\n';
         }
         for (int i = 0; i < WIDTH + 2; i++) cout << BORDER;
-        cout << "\nScore: " << score << "   High Score: " << highScore << '\n';
+        cout << "\nScore: " << (!scores.empty() ? scores[0] : 0) << "   High Score: " << highScore << '\n';
     }
 
     void processInput() {
         char control = readControl();
         if (!control) return;
-        if (control == 'U') snake.setDir(Snake::UP);
-        else if (control == 'D') snake.setDir(Snake::DOWN);
-        else if (control == 'L') snake.setDir(Snake::LEFT);
-        else if (control == 'R') snake.setDir(Snake::RIGHT);
-        else if (control == 'w' || control == 'W') snake.setDir(Snake::UP);
-        else if (control == 's' || control == 'S') snake.setDir(Snake::DOWN);
-        else if (control == 'a' || control == 'A') snake.setDir(Snake::LEFT);
-        else if (control == 'd' || control == 'D') snake.setDir(Snake::RIGHT);
+        if (snakes.empty()) return;
+        
+        if (control == 'U' || control == 'w' || control == 'W') snakes[0].setDir(Snake::UP);
+        else if (control == 'D' || control == 's' || control == 'S') snakes[0].setDir(Snake::DOWN);
+        else if (control == 'L' || control == 'a' || control == 'A') snakes[0].setDir(Snake::LEFT);
+        else if (control == 'R' || control == 'd' || control == 'D') snakes[0].setDir(Snake::RIGHT);
         else if (control == 'q' || control == 'Q') running = false;
         else if (control == 'r' || control == 'R') restart();
     }
 
     void update() {
-        snake.move();
-        Position h = snake.head();
+        for (size_t i = 0; i < snakes.size(); ++i) {
+            snakes[i].move();
+            Position h = snakes[i].head();
 
-        if (h.x < 0 || h.x >= WIDTH || h.y < 0 || h.y >= HEIGHT || snake.collidesWithSelf()) {
-            gameOver = true;
-            return;
-        }
+            bool collision = false;
+            if (h.x < 0 || h.x >= WIDTH || h.y < 0 || h.y >= HEIGHT || snakes[i].collidesWithSelf()) {
+                collision = true;
+            } else {
+                for (size_t j = 0; j < snakes.size(); ++j) {
+                    if (i != j && snakes[j].occupies(h)) {
+                        collision = true;
+                        break;
+                    }
+                }
+            }
 
-        if (h == food.get()) {
-            score++;
-            snake.move(true);
-            food.spawn(snake);
-            if (score > highScore) highScore = score;
-            if (speedFactor > 0.3) speedFactor *= 0.95; // speed increases gradually
+            if (collision) {
+                gameOver = true;
+                return;
+            }
+
+            if (h == food.get()) {
+                scores[i]++;
+                snakes[i].move(true);
+                food.spawn(snakes);
+                if (scores[i] > highScore) highScore = scores[i];
+                if (speedFactor > 0.3) speedFactor *= 0.95;
+            }
         }
     }
 
     void restart() {
-        snake.reset();
-        score = 0;
+        snakes.resize(1);
+        snakes[0].reset();
+        scores.assign(snakes.size(), 0);
         gameOver = false;
         speedFactor = 1.0;
-        food.spawn(snake);
+        food.spawn(snakes);
     }
 
 public:
@@ -218,7 +244,7 @@ public:
 
             // Show Game Over only once
             cout << "\nGAME OVER \n";
-            cout << "Final Score: " << score << "   High Score: " << highScore << '\n';
+            cout << "Final Score: " << (!scores.empty() ? scores[0] : 0) << "   High Score: " << highScore << '\n';
             cout << "Press R to restart or Q to quit.\n";
 
             // Wait for player choice
@@ -233,7 +259,7 @@ public:
 
         showCursor();
         disableNonBlocking();
-        cout << "\nThanks for playing! Final Score: " << score << "\n";
+        cout << "\nThanks for playing! Final Score: " << (!scores.empty() ? scores[0] : 0) << "\n";
     }
 };
 
