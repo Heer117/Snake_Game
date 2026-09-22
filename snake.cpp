@@ -88,6 +88,8 @@ public:
 class Game {
     Snake snake;
     Food food;
+    std::istream &in;   // seam: input source (default construction keeps the raw terminal path)
+    std::ostream &out;  // seam: output destination (defaults to std::cout)
     int score = 0;
     int highScore = 0;
     bool running = true;
@@ -97,10 +99,10 @@ class Game {
 
     struct termios oldt;
 
-    void hideCursor() { cout << "\033[?25l"; }
-    void showCursor() { cout << "\033[?25h"; }
-    void clearScreen() { cout << "\033[2J"; }
-    void moveCursorTopLeft() { cout << "\033[H"; }
+    void hideCursor() { out << "\033[?25l"; }
+    void showCursor() { out << "\033[?25h"; }
+    void clearScreen() { out << "\033[2J"; }
+    void moveCursorTopLeft() { out << "\033[H"; }
 
     void enableNonBlocking() {
         tcgetattr(STDIN_FILENO, &oldt);
@@ -115,6 +117,10 @@ class Game {
 
     char readKey() {
         char ch = 0;
+        if (&in != &std::cin) {            // seam: injected stream supplies deterministic input
+            if (!in.get(ch)) return 0;     // exhausted stream behaves like "no key pressed"
+            return ch;
+        }
         ssize_t r = read(STDIN_FILENO, &ch, 1);
         if (r <= 0) return 0;
         return ch;
@@ -140,21 +146,21 @@ class Game {
 
     void drawBoard() {
         moveCursorTopLeft();
-        for (int i = 0; i < WIDTH + 2; i++) cout << BORDER;
-        cout << '\n';
+        for (int i = 0; i < WIDTH + 2; i++) out << BORDER;
+        out << '\n';
         for (int y = 0; y < HEIGHT; y++) {
-            cout << BORDER;
+            out << BORDER;
             for (int x = 0; x < WIDTH; x++) {
                 Position p{x, y};
-                if (p == snake.head()) cout << SNAKE_HEAD;
-                else if (snake.occupies(p)) cout << SNAKE_BODY;
-                else if (p == food.get()) cout << FOOD_ICON;
-                else cout << TILE;
+                if (p == snake.head()) out << SNAKE_HEAD;
+                else if (snake.occupies(p)) out << SNAKE_BODY;
+                else if (p == food.get()) out << FOOD_ICON;
+                else out << TILE;
             }
-            cout << BORDER << '\n';
+            out << BORDER << '\n';
         }
-        for (int i = 0; i < WIDTH + 2; i++) cout << BORDER;
-        cout << "\nScore: " << score << "   High Score: " << highScore << '\n';
+        for (int i = 0; i < WIDTH + 2; i++) out << BORDER;
+        out << "\nScore: " << score << "   High Score: " << highScore << '\n';
     }
 
     void processInput() {
@@ -199,7 +205,8 @@ class Game {
     }
 
 public:
-    Game() { srand(time(0)); }
+    Game(std::istream &inStream = std::cin, std::ostream &outStream = std::cout)
+        : in(inStream), out(outStream) { srand(time(0)); }
     void run() {
         enableNonBlocking();
         hideCursor();
@@ -217,9 +224,9 @@ public:
             if (!running) break;
 
             // Show Game Over only once
-            cout << "\nGAME OVER \n";
-            cout << "Final Score: " << score << "   High Score: " << highScore << '\n';
-            cout << "Press R to restart or Q to quit.\n";
+            out << "\nGAME OVER \n";
+            out << "Final Score: " << score << "   High Score: " << highScore << '\n';
+            out << "Press R to restart or Q to quit.\n";
 
             // Wait for player choice
             bool choiceMade = false;
@@ -233,7 +240,7 @@ public:
 
         showCursor();
         disableNonBlocking();
-        cout << "\nThanks for playing! Final Score: " << score << "\n";
+        out << "\nThanks for playing! Final Score: " << score << "\n";
     }
 };
 
